@@ -1,0 +1,582 @@
+#!/bin/bash
+#**********************************************************************************************************************************
+# Name:    DoSNC
+# Version: 3.0 
+# Purpose: This tool is used for automated implementation of Secure Network Communication for SAP Systems.
+# Author:  Sudhanshu Shekhar
+# Support: sudhanshu.shekhar@nike.com
+#**********************************************************************************************************************************
+#**********************************************************************************************************************************
+# Change history:
+#   Oct 15, 2019, version 0.0, Initial thought flow and development, basic version on scribe.
+#   Oct 20, 2019, version 1.0, Re-designed & public version developed.
+#   Oct 30, 2019, Version 2.0, Added logging, emailing & mailreceiver logic. 
+#   Apr 04, 2020, Version 3.0, Corrected logic for DVEBMGSxx instance type.
+#   Tested On - SUSE & RHEL Linux
+#**********************************************************************************************************************************
+
+#==================================================
+# Current Tool version
+#==================================================
+tool_version="3.0"
+tool_scope="(Designed for SAP SNC Implementation, Tested On - SUSE & RHEL Linux)"
+#==================================================
+
+#==================================================
+# Set Global Variables for the tool & its functions
+#==================================================
+TOOL_NAME=${0}
+ACTION=${1}
+MODULE=${2}
+INSTANCE_ID=${3}
+NUMBER_INPUTS="$#"
+DoSNC_DIR=`pwd`
+STARTTIME=`date +%s`
+#==================================================
+
+#==================================================
+# Email recipients
+#==================================================
+#mailreceiver="sudhanshu.shekhar@nike.com"
+mailreceiver=`cat ${DoSNC_DIR}/config/DoSNC-mailreceiver`
+#==================================================
+
+#==================================================
+# Function: tool_help()
+# Purpose: provide a detailed usage instruction to the user
+tool_help()
+{
+    #clear
+    cat ${DoSNC_DIR}/config/DoSNC-banner
+    echo ""
+    echo -e "\e[34mAUTHOR:\e[0m Sudhanshu Shekhar"
+    echo -e "\e[34mEMAIL:\e[0m sudhanshu.shekhar@nike.com"
+    echo ""
+    echo ""
+    echo -e "\e[34mNAME:\e[0m DoSNC - ${tool_version} \e[31m ${tool_scope} \e[0m"
+    echo -e "\e[34mDESCRIPTION:\e[0m This tool is used for automated implementation of Secure Network Communication for SAP Systems."
+    echo ""
+    echo -e "\e[34mPREREQUISITES TO USE THIS TOOL:\e[0m"
+    echo "1. Venafi Nike TLS CA Certificate is installed on the server where you want to run this tool."
+    echo "2. You have read & understood the Confluence wiki on how to use and operate DoSNC for implementing SNC for SAP systems."
+    echo ""
+    echo -e "\e[34mTOOL USAGE:\e[0m"
+    echo -e "\e[34m==========:\e[0m"
+    echo -e "\e[31mFor SAP SNC : (Run me as "sidadm" user only):\e[0m"
+    echo -e "./DoSNC <Action - ENROLL/RENEW > <Option - ABAP/JAVA > <Instance_ID D00/DVEBMGS01 >"
+    echo ""
+    echo -e "01 - If you are trying to implement Secure Network Communication for SAP Systems for the first time using DoSNC, then; as \e[34m\e[5msidadm\e[0m  user execute DoSNC like below - "
+    echo -e "e.g. -->  \e[93m ./DoSNC ENROLL ABAP D00 \e[0m"
+    echo ""
+    echo -e "02 - If you are trying to renew or fix the existing Secure Network Communication for SAP Systems, then; as \e[34m\e[5msidadm\e[0m user execute DoSNC like below - "
+    echo -e "e.g. --> \e[93m  ./DoSNC RENEW ABAP D00 \e[0m"
+    echo ""
+    echo ""
+    echo -e "\e[34mOther Options:\e[0m"
+    echo "        -help               - for displaying the help page "
+    echo "        -h                  - for displaying the help page "
+    echo "        -version            - for displaying the version information "
+    echo "        -v                  - for displaying the version information "
+    echo "        -u                  - for displaying usage information "
+    echo "        -usage              - for displaying usage information "
+    echo "        -i                  - for displaying the detailed information "
+    echo "        -info               - for displaying the detailed information "
+    echo ""
+    exit 0
+}
+# END OF FUNCTION
+#==================================================
+
+#==================================================
+# Function: tool_version()
+# Purpose: Tool version page display
+tool_version()
+{
+    clear
+    cat ${DoSNC_DIR}/config/DoSNC-banner
+    echo ""
+    echo -e "\e[34mCurrent Version:\e[0m ${tool_version} \e[31m ${tool_scope} \e[0m"
+    echo ""
+    echo -e "\e[34mChange History:\e[0m"
+    echo "  Oct 15, 2019, version 0.0, Initial thought flow and development, basic version on scribe."
+    echo "  Oct 20, 2019, version 1.0, Re-designed & public version developed."
+    echo "  Oct 30, 2019, Version 2.0, Added logging, emailing & mailreceiver logic."
+    echo "  Apr 04, 2020, Version 3.0, Corrected logic for DVEBMGSxx instance type."
+    echo ""
+    echo -e "\e[34mAUTHOR:\e[0m Sudhanshu Shekhar"
+    echo -e "\e[34mEMAIL:\e[0m sudhanshu.shekhar@nike.com"
+    echo ""
+    exit 0
+}
+# END OF FUNCTION
+#==================================================
+
+#==================================================
+# Function: tool_info()
+# Purpose: Tool information page display
+tool_info()
+{
+    clear
+    cat ${DoSNC_DIR}/config/DoSNC-banner
+    echo ""
+    echo -e "\e[34mCurrent Version:\e[0m ${tool_version} \e[31m ${tool_scope} \e[0m"
+    echo ""
+    cat ${DoSNC_DIR}/config/DoSNC-info
+    echo ""
+    echo ""
+    echo -e "\e[34mAUTHOR:\e[0m Sudhanshu Shekhar"
+    echo -e "\e[34mEMAIL:\e[0m sudhanshu.shekhar@nike.com"
+    echo ""
+    exit 0
+}
+# END OF FUNCTION
+#==================================================
+
+#==================================================
+# Function: tool_input_check()
+# Purpose: Tool input check
+tool_input_check()
+{
+clear
+#cat ${DoSNC_DIR}/config/DoSNC-banner
+echo ""
+echo ""
+   if [ "${NUMBER_INPUTS}" -eq 3 ] ;then
+                # Verify if the user input for ACTION is "ENROLL or RENEW" and for MODULE is "ABAP or JAVA" :: ERROR-TRAP
+                        if [[ ${ACTION} == ENROLL ]] || [[ ${ACTION} == RENEW ]] && [[ ${MODULE} == ABAP ]] || [[ ${MODULE} == JAVA ]] ; then
+                            DoSNC_INPUT_RC=0
+                            # Verify the arguments and call the specific certificate enrollment function
+                            if [[ ${ACTION} == ENROLL ]] || [[ ${ACTION} == RENEW ]] && [[ ${MODULE} == ABAP ]] ; then                            
+                                # Call the function for ABAP SNC enrollment
+				                cat ${DoSNC_DIR}/config/DoSNC-banner
+                                echo -e "\e[34mInfo::\e[0m Starting SSO-SNC \e[93m ${ACTION}\e[0m for \e[93m ${MODULE}\e[0m at: `date`"
+                                echo -e "\e[34mInfo::\e[0m You are using DoSNC tool - \e[93m ${tool_version} ${tool_scope}\e[0m."
+                                echo -e "\e[34mInfo::\e[0m You have executed: \e[93m ${TOOL_NAME} ${ACTION} ${MODULE} ${INSTANCE_ID}\e[0m"
+                                perform_snc_enroll_abap
+                            elif [[ ${ACTION} == ENROLL ]] || [[ ${ACTION} == RENEW ]] && [[ ${MODULE} == JAVA ]] ; then
+                                # Call the function for JAVA SNC enrollment
+                                cat ${DoSNC_DIR}/config/DoSNC-banner
+                                echo -e "\e[34mInfo::\e[0m Starting SSO-SNC \e[93m ${ACTION}\e[0m for \e[93m ${MODULE}\e[0m at: `date`"
+                                echo -e "\e[34mInfo::\e[0m You are using DoSNC tool - \e[93m ${tool_version} ${tool_scope}\e[0m."
+                                echo -e "\e[34mInfo::\e[0m You have executed: \e[93m ${TOOL_NAME} ${ACTION} ${MODULE} ${INSTANCE_ID}\e[0m"
+                                perform_snc_enroll_java
+                            else
+                                DoSNC_INPUT_RC=1
+                                echo -e "\e[31m\e[5mError Detected::\e[0m Check the arguments provided to the tool & retry."
+                                echo ""
+                                echo ""
+                                echo ""
+                                echo -e "\e[34mRefer to the tool help below -->\e[0m"
+                                echo ""
+                                echo ""
+                                tool_help                                
+                            fi
+                        else
+                                DoSNC_INPUT_RC=1
+				                echo -e "\e[31m\e[5mError Detected::\e[0m Check the arguments provided to the tool & retry."
+                                echo ""
+                                echo ""
+                                echo ""
+				                echo -e "\e[34mRefer to the tool help below -->\e[0m"
+				                echo ""
+				                echo ""
+                                tool_help
+
+                        fi
+        else
+	echo -e "\e[31m\e[5mError Detected::\e[0m Check the arguments provided to the tool & retry."
+	echo -e "\e[34mRefer to the tool help below -->\e[0m"
+	echo ""
+	echo ""
+        tool_help
+   fi
+}
+# END OF FUNCTION
+#==================================================
+
+
+#==================================================
+# Function: perform_snc_enroll_java()
+# Purpose: Start performing the enrollment of SNC for SAP java.
+perform_snc_enroll_java()       
+{
+    echo -e "\e[31m\e[5mError Detected::\e[0m Java module is still under development, current scope is limited to ABAP only."
+    echo -e "\e[34mRefer to the tool help below -->\e[0m"
+        tool_help
+exit 0
+}
+# END OF FUNCTION
+#==================================================
+
+
+#==================================================
+# Function: perform_snc_enroll_abap()
+# Purpose: Start performing the enrollment of SNC for the SAP system.
+perform_snc_enroll_abap()       
+{
+	#Set Variables for the sapgenpse command
+    #e.g. sid=lap
+    sid=`hostname | cut -c 4-6`
+    #e.g. SID=LAP
+    SID=`hostname | cut -c 4-6 | tr '[:lower:]' '[:upper:]'`
+
+    EXECUTOR=`whoami`
+    ABAP_OWNER=${sid}adm
+    INSTANCE=${INSTANCE_ID}
+    INSTANCE_NUM=`echo ${INSTANCE} | rev | cut -c 1-2`
+    DBMS_TYPE=`echo $dbms_type`
+
+    echo -e "\e[34mInfo::\e[0m DoSNC Executor - $EXECUTOR."
+    echo -e "\e[34mInfo::\e[0m SAP Instance Owner - $ABAP_OWNER."
+    echo -e "\e[34mInfo::\e[0m Database Type - $DBMS_TYPE."
+    echo -e "\e[34mInfo::\e[0m SAP Instance ID - $INSTANCE."
+    echo -e "\e[34mInfo::\e[0m SAP Instance Number - $INSTANCE_NUM. "
+    echo ""
+    echo ""
+#if [ "${EXECUTOR}" == ${ABAP_OWNER} ] &&  [ "${DBMS_TYPE}" == HDB ] ; then
+if [ "${EXECUTOR}" == ${ABAP_OWNER} ] ; then
+	echo -e "\e[34mInfo::\e[0m DoSNC works for DBMS_TYPE HDB & ORA."
+        echo -e "\e[34mInfo::\e[0m Starting the SNC installation on ${SID} system on its CI server - `hostname -f`. Please wait.. "
+        #echo "" 
+        #sleep 3
+        # Declare the SEC, EXE & BASE directories
+        BASE_DIR="/usr/sap/${SID}/${INSTANCE}"
+        SEC_DIR="/usr/sap/${SID}/${INSTANCE}/sec"
+        EXE_DIR="`echo ${DIR_LIBRARY}`"
+
+        # Create an intermediate SEC directory for the SNC & set the ownership to ABAP_OWNER:sapsys
+        rm -rf ${BASE_DIR}/snc_xact_remove # Remove any old snc_xact directory
+        mv ${BASE_DIR}/snc_xact ${BASE_DIR}/snc_xact_remove 
+        mkdir ${BASE_DIR}/snc_xact
+        chown ${ABAP_OWNER}:sapsys ${BASE_DIR}/snc_xact
+
+        # Export the intermediate SEC directory as SECUDIR
+        export LD_LIBRARY_PATH=${EXE_DIR}
+        export SECUDIR=${BASE_DIR}/snc_xact
+        cd ${BASE_DIR}/snc_xact
+
+        # Create & Set the logfile location now
+        LOG_FILE1="${BASE_DIR}/snc_xact/DoSNC.log"
+        touch ${LOG_FILE1}
+        #Let me recapture some logs first in the logfile in silence
+        echo -e "\e[34mInfo::\e[0m Starting SSO-SNC \e[93m ${ACTION}\e[0m for \e[93m ${MODULE}\e[0m at: `date`" > ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m You are using DoSNC tool - \e[93m ${tool_version} ${tool_scope}\e[0m." >> ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m You have executed: \e[93m ${TOOL_NAME} ${ACTION} ${MODULE} ${INSTANCE_ID}\e[0m" >> ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m Starting the SNC installation on ${SID} system on its CI server - `hostname -f`. Please wait.. " >> ${LOG_FILE1}
+
+        # From here onwards i will capture all the logs in the logfile & print the output on the screen
+        echo -e "\e[34mInfo::\e[0m My present working directory is ${BASE_DIR}/snc_xact" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m Please ignore any "WARNING" statement below related to the PIN/Passphrase." |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+
+        # Generate the SAPSNCS.pse now
+        ${EXE_DIR}/sapgenpse gen_pse -p ${BASE_DIR}/snc_xact/SAPSNCS.pse -x nikenw04 -r ${BASE_DIR}/snc_xact/${SID}_SNC.csr "CN=`whoami | cut -c 1-3 | tr '[:lower:]' '[:upper:]'`,OU=SAP,O=NIKE,L=BEAVERTON,C=US" |& tee -a ${LOG_FILE1}
+
+        # Verify if the SAPSNCS.pse file has been generated
+        SAPSNCS_FILE="${BASE_DIR}/snc_xact/SAPSNCS.pse" 
+                if [ ! -f "${SAPSNCS_FILE}" ] ; then
+            echo -e "\e[31m\e[5mError Detected::\e[0m SAPSNCS.pse could not be created, please check, cancelling this run & exiting." |& tee -a ${LOG_FILE1}
+            exit
+                else
+                echo -e "\e[34mInfo::\e[0m SAPSNCS.pse has been created, moving ahead to ${ACTION} the certificate in VENAFI portal." |& tee -a ${LOG_FILE1}
+                fi
+
+    # Begin the certificate Renewal/Enrollment in Venafi Portal
+    if [[ ${ACTION} == RENEW ]] ; then
+        # Set variable for the certificate nickname counter
+        old_cert_count="`cat ${BASE_DIR}/sec/snc-pickup-id | rev | cut -c 1-2 | rev`"
+        new_cert_count=$(( 10#${old_cert_count} + 1 ))
+        echo -e "\e[34mInfo::\e[0m Nickname for this certficate in VENAFI portal will be \e[93m ${SID}-SNC-`date +"%m-%d-%y"`-0${new_cert_count} \e[0m" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+
+            # RENEW the VENAFI certificate now
+            ${DoSNC_DIR}/config/DoSNCapi enroll -tpp-url https://ven.nike.com -tpp-user "`cat ${DoSNC_DIR}/config/tpp-username`" -tpp-password "`cat ${DoSNC_DIR}/config/tpp-password-file | base64 -d`" -z "`cat ${DoSNC_DIR}/config/tpp-zone-file`" -no-prompt -csr file:${BASE_DIR}/snc_xact/${SID}_SNC.csr -chain root-first -nickname ${SID}-SNC-`date +"%m-%d-%y"`-0${new_cert_count} -pickup-id-file ${BASE_DIR}/snc_xact/snc-pickup-id -timeout 300 |& tee -a ${LOG_FILE1}
+
+    else 
+        # Set variable for the certificate nickname counter
+        new_cert_count=0
+        echo -e "\e[34mInfo::\e[0m Nickname for this certficate in VENAFI portal will be `hostname`-Webdisp-`date +"%m-%d-%y"`-0${new_cert_count}" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+
+        # ENROLL the VENAFI certificate now
+        ${DoSNC_DIR}/config/DoSNCapi enroll -tpp-url https://ven.nike.com -tpp-user "`cat ${DoSNC_DIR}/config/tpp-username`" -tpp-password "`cat ${DoSNC_DIR}/config/tpp-password-file | base64 -d`" -z "`cat ${DoSNC_DIR}/config/tpp-zone-file`" -no-prompt -csr file:${BASE_DIR}/snc_xact/${SID}_SNC.csr -chain root-first -nickname ${SID}-SNC-`date +"%m-%d-%y"`-0${new_cert_count} -pickup-id-file ${BASE_DIR}/snc_xact/snc-pickup-id -timeout 300 |& tee -a ${LOG_FILE1}
+
+    fi
+
+        # Verify if the pickup-id file has been generated
+        PICK_FILE="${BASE_DIR}/snc_xact/snc-pickup-id"
+                if [ ! -f "${PICK_FILE}" ] ; then
+            echo -e "\e[31m\e[5mError Detected::\e[0m Pickup ID file could not be created, please check, cancelling this run & exiting." |& tee -a ${LOG_FILE1}
+            exit
+                else
+        echo ""
+                echo -e "\e[34mInfo::\e[0m Pickup ID file has been created, moving ahead to retreive the enrolled certificate from Venafi Portal." |& tee -a ${LOG_FILE1}
+        echo ""
+                fi
+
+        # Retrieve the enrolled certificate now
+        ${DoSNC_DIR}/config/DoSNCapi pickup -tpp-url https://ven.nike.com -tpp-user "`cat ${DoSNC_DIR}/config/tpp-username`" -tpp-password "`cat ${DoSNC_DIR}/config/tpp-password-file | base64 -d `" -z "`cat ${DoSNC_DIR}/config/tpp-zone-file`" -chain root-first -file ${BASE_DIR}/snc_xact/${SID}-SNC.pem -pickup-id-file ${BASE_DIR}/snc_xact/snc-pickup-id |& tee -a ${LOG_FILE1}
+        # Verify if the certificate has been picked up successfully
+        PEM_FILE="${BASE_DIR}/snc_xact/${SID}-SNC.pem"
+                if [ ! -f "${PEM_FILE}" ] ; then
+        echo "" |& tee -a ${LOG_FILE1}
+            echo -e "\e[31m\e[5mError Detected::\e[0m Own Pem Certificate could not be retrieved from venafi, please check, cancelling this run & exiting." |& tee -a ${LOG_FILE1}
+            exit
+                else
+        echo ""
+                echo -e "\e[34mInfo::\e[0m Own Pem Certificate has been retrieved successfully from Venafi, moving ahead to import own certificate in the SAPSNCS.pse file." |& tee -a ${LOG_FILE1}
+        echo ""
+                fi
+
+        # Set the permissions & ownership of all the files created so far
+        chmod 775 ${BASE_DIR}/snc_xact/${SID}-SNC.pem
+        chown -R ${ABAP_OWNER}:sapsys ${BASE_DIR}/snc_xact/
+        #sleep 3 
+
+        # Import the PEM certificate into the SAPSNCS.pse now and verify
+        ${EXE_DIR}/sapgenpse import_own_cert -p ${BASE_DIR}/snc_xact/SAPSNCS.pse -x nikenw04 -c ${BASE_DIR}/snc_xact/${SID}-SNC.pem
+                RC=$?
+                if [ ${RC} -ne 0 ] ; then
+        echo "" |& tee -a ${LOG_FILE1}
+                echo -e "\e[31m\e[5mError Detected::\e[0m Import Own Certificate has failed, please check, cancelling this run & exiting." |& tee -a ${LOG_FILE1}
+            exit
+                else
+                echo -e "\e[34mInfo::\e[0m Import Own Certificate in the SAPSNCS.pse has completed successfully, moving ahead to import the SSO SLS Root certificate now." |& tee -a ${LOG_FILE1}
+                fi
+
+        # Import the Root Certificate from the SSO SLS server now and verify 
+        echo "" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        ${EXE_DIR}/sapgenpse maintain_pk -p ${BASE_DIR}/snc_xact/SAPSNCS.pse -x nikenw04 -m ${DoSNC_DIR}/doclib/SLS_RootPubKey.crt -y |& tee -a ${LOG_FILE1}
+                RC=$?
+                if [ ${RC} -ne 0 ] ; then
+        echo ""  |& tee -a ${LOG_FILE1}
+                echo -e "\e[31m\e[5mError Detected::\e[0m Import of SSO SLS Root certificate has failed, please check, cancelling this run & exiting." |& tee -a ${LOG_FILE1}
+            exit
+                else
+                echo -e "\e[34mInfo::\e[0m Import of SSO SLS Root Certificate in the SAPSNCS.pse has completed successfully, moving ahead to copy the files in SECUDIR now." |& tee -a ${LOG_FILE1}
+                fi
+        # Copy SNC pse & cred file to the SECUDIR now
+        echo -e "\e[34mInfo::\e[0m Copying all the files from snc_xact folder into SECUDIR now." |& tee -a ${LOG_FILE1} 
+        #rm -rf ${BASE_DIR}/sec_B4_SNC_`date +"%m-%d-%y"`
+        cp -p -R ${BASE_DIR}/sec ${BASE_DIR}/sec_B4_SNC_`date +"%m-%d-%y"`
+        echo -e "\e[34mInfo::\e[0m Backed up the current SECUDIR to  - ${BASE_DIR}/sec_B4_SNC_`date +"%m-%d-%y"`." |& tee -a ${LOG_FILE1}
+        cp -p  ${BASE_DIR}/snc_xact/* ${BASE_DIR}/sec/.
+        
+        # Verify if the pse file been copied        
+        SNC_PSE_FINAL="${BASE_DIR}/sec/SAPSNCS.pse"
+                if [ ! -f "${SNC_PSE_FINAL}" ] ; then
+                    echo -e "\e[31m\e[5mError Detected::\e[0m SNC pse file could not be copied to SECUDIR, please check, cancelling this run & exiting." |& tee -a ${LOG_FILE1}
+                    exit
+                else
+                    echo -e "\e[34mInfo::\e[0m SNC pse file has been copied into SECUDIR, moving ahead now." |& tee -a ${LOG_FILE1}
+                fi       
+        echo "" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m Listed below are the old & new sec directories, just for your reference -" |& tee -a ${LOG_FILE1}
+        ls -ld ${BASE_DIR}/sec*
+
+        #Create the server credential for ABAP_OWNER user
+        BASE_DIR="/usr/sap/${SID}/${INSTANCE}"
+        SEC_DIR="/usr/sap/${SID}/${INSTANCE}/sec"
+        EXE_DIR="`echo ${DIR_LIBRARY}`"
+
+        echo "" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m Create the SSO credentials for the ${ABAP_OWNER} user on SAPSNCS.pse file present in the SECUDIR." |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m My pse file is -->  `ls -ld ${SEC_DIR}/SAPSNCS.pse`" |& tee -a ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m My PWD is -->  `pwd`" |& tee -a ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m Changing directory to the SECUDIR now." |& tee -a ${LOG_FILE1}
+        cd ${SEC_DIR}
+        echo -e "\e[34mInfo::\e[0m My PWD after changing the directory is -->  `pwd`" |& tee -a ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m Creating the cred_v2 file now." |& tee -a ${LOG_FILE1}
+
+        ${EXE_DIR}/sapgenpse seclogin -p ${SEC_DIR}/SAPSNCS.pse -x nikenw04 -O ${ABAP_OWNER} |& tee -a ${LOG_FILE1}
+        
+        echo ""
+        echo ""
+        echo -e "\e[34mInfo::\e[0m Changing directory to the snc_xact again now." |& tee -a ${LOG_FILE1}
+        cd ${BASE_DIR}/snc_xact
+        echo -e "\e[34mInfo::\e[0m My PWD is -->  `pwd`" |& tee -a ${LOG_FILE1}
+        
+        sleep 10
+
+        # Verify if the credential file has been generated
+        CRED_FILE="${SEC_DIR}/cred_v2" 
+                if [ ! -f "${CRED_FILE}" ] ; then
+                   #Copying the file from the snc_xact folder 
+                   cp ${BASE_DIR}/snc_xact/cred_v2 ${SEC_DIR}/.
+                   echo -e "\e[34mInfo::\e[0m Since we did not have any cred_v2 file in the SECUDIR for other PSEs, i have copied the new one from snc_xact now." |& tee -a ${LOG_FILE1}
+                fi
+                if [ ! -f "${CRED_FILE}" ] ; then 
+                    echo -e "\e[31m\e[5mError Detected::\e[0m Credential file could not be created, please check, cancelling this run & exiting." |& tee -a ${LOG_FILE1}
+                    exit
+                else
+                    echo -e "\e[34mInfo::\e[0m cred_v2 SSO credential file has been created, moving ahead to print the final status of the SAPSNCS.pse environment." |& tee -a ${LOG_FILE1}
+                fi
+
+        # Get the final status of the SAPSNCS.pse file now
+        #echo ""
+        #echo ""
+        echo -e "\e[34mInfo::\e[0m Here is how the SAPSNCS.pse environment looks with My Certificate, Nike Root, SSO-SLS Root & Venafi CA Certificates installed now -" |& tee -a ${LOG_FILE1}
+        echo -e "\e[34mInfo::\e[0m Validate that ExtKeyUsage is \e[34m\e[5m ClientAuthentication ServerAuthentication.\e[0m"  |& tee -a ${LOG_FILE1}
+        ${EXE_DIR}/sapgenpse get_my_name -p ${BASE_DIR}/sec/SAPSNCS.pse -x nikenw04 -v |& tee -a ${LOG_FILE1}
+        
+        # Stage the SNC pse in profile directory for the app servers
+        #echo -e "\e[34mInfo::\e[0m Staging the SNC pse file into Profile directory now."        
+        #mv /sapmnt/${SID}/profile/${SID}_SAPSNCS.pse /sapmnt/${SID}/profile/SAPSNCS.pse_BKP_`date +"%m-%d-%y"`
+        #cp ${BASE_DIR}/sec/SAPSNCS.pse /sapmnt/${SID}/profile/${SID}_SAPSNCS.pse               
+        # Verify if the pse file has been copied into profile directory        
+        #SNC_PSE_PFL="/sapmnt/${SID}/profile/${SID}_SAPSNCS.pse"
+                #if [ ! -f "${SNC_PSE_PFL}" ] ; then
+                   # echo -e "\e[31m\e[5mError Detected::\e[0m SNC pse could not be staged into profile directory, please check, cancelling this run & exiting."
+                    #exit
+                #else
+                    #echo -e "\e[34mInfo::\e[0m SNC pse file has been staged into profile directory, moving ahead now."
+                #fi
+
+
+		# Stage the Security & SNC/SPNEGO parameters in the default profile now
+		echo -e "\e[34mInfo::\e[0m Staging the security, SNC/SPNEGO specific parameters in the DEFAULT.PFL" |& tee -a ${LOG_FILE1}
+		cp /sapmnt/${SID}/profile/DEFAULT.PFL /sapmnt/${SID}/profile/DEFAULT.PFL_BKP_B4_SNC_`date +"%m-%d-%y"` |& tee -a ${LOG_FILE1}	
+		echo -e "\e[34mInfo::\e[0m Here is a backup of the DEFAULT.PFL file before this run of DoSNC - /sapmnt/${SID}/profile/DEFAULT.PFL_BKP_B4_SNC_`date +"%m-%d-%y"`." |& tee -a ${LOG_FILE1}
+		cp ${DoSNC_DIR}/doclib/DEFAULT_params ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage |& tee -a ${LOG_FILE1}
+		
+		echo -e "\e[34mInfo::\e[0m Cleaning up the DEFAULT.PFL & removing the parameters from last run of DoSNC between the markers - "Begin4DoSNC and End4DoSNC"." |& tee -a ${LOG_FILE1}
+		rm -f ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact |& tee -a ${LOG_FILE1} 
+		cp /sapmnt/${SID}/profile/DEFAULT.PFL ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact |& tee -a ${LOG_FILE1}
+		sed '/Begin4DoSNC/,/End4DoSNC/d' ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact > ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact.tmp 
+		mv ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact.tmp ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact
+		#grep -v "marked4DoSNC" ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact > ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact.temp
+		#mv ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact.temp ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact
+		#sed '/#marked4DoSNC/d' ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact
+		echo -e "\e[34mInfo::\e[0m Preparing the security, SNC/SPNEGO specific parameters to be staged in the DEFAULT.PFL" |& tee -a ${LOG_FILE1}
+		echo -e "\e[34mInfo::\e[0m Below is the dynamically generated "snc/identity/as" parameter which will be added into the DEFAULT.PFL - "	 |& tee -a ${LOG_FILE1}
+		echo -e "\e[93m snc/identity/as = p:CN=${SID}, OU=SAP, O=NIKE, L=BEAVERTON, C=US \e[0m" |& tee -a ${LOG_FILE1}
+		echo -e "\e[34mInfo::\e[0m All the other parameters will be staged from the file - ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage" |& tee -a ${LOG_FILE1}	
+		echo "snc/identity/as = p:CN=${SID}, OU=SAP, O=NIKE, L=BEAVERTON, C=US" >> ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage |& tee -a ${LOG_FILE1}
+		echo "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#" >> ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage |& tee -a ${LOG_FILE1}
+		echo "# Note - Please do not add/change any parameter between the lines marked with \"Begin/End 4DoSNC\"  #" >> ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage |& tee -a ${LOG_FILE1}
+		echo "# DoSNC Utility will delete and update the security & SNC/SPNEGO parameters whenever run          #" >> ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage |& tee -a ${LOG_FILE1}
+		echo "#                     Security & SNC/SPNEGO Params staged by DoSNC                                #" >> ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage |& tee -a ${LOG_FILE1}
+		echo "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ End4DoSNC ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#" >> ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage  |& tee -a ${LOG_FILE1}
+		
+		cat ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage >> ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact 
+		cp ${BASE_DIR}/snc_xact/DEFAULT.PFL.xact /sapmnt/${SID}/profile/DEFAULT.PFL
+		echo "" |& tee -a ${LOG_FILE1}
+		echo "" |& tee -a ${LOG_FILE1} 
+		echo "" |& tee -a ${LOG_FILE1}
+		echo -e "\e[34mInfo::\e[0m Below are the parameters & information being appended in the DEFAULT.PFL - " |& tee -a ${LOG_FILE1}
+		echo "" |& tee -a ${LOG_FILE1}
+		echo "" |& tee -a ${LOG_FILE1}
+		cat ${BASE_DIR}/snc_xact/DEFAULT_params_to_stage |& tee -a ${LOG_FILE1}
+		echo "" |& tee -a ${LOG_FILE1}
+		echo "" |& tee -a ${LOG_FILE1}
+
+		sleep 10
+
+        # Run revoke for the old certificate
+        echo "" |& tee -a ${LOG_FILE1}
+        echo "" |& tee -a ${LOG_FILE1}
+        echo "Looks like the DoSNC action is to ${ACTION} the certificate." |& tee -a ${LOG_FILE1}
+        if [[ ${ACTION} == RENEW ]] ; then
+                echo -e "\e[34mInfo::\e[0m Let me revoke the old certificate from VENAFI portal - " |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1} 
+                OLD_SECUDIR="${BASE_DIR}/sec_old_`date +"%m-%d-%y"`" 
+                Date=`date +"%m-%d-%y"`
+                ${DoSNC_DIR}/config/DoSNCapi revoke -tpp-url https://ven.nike.com -tpp-user "`cat ${DoSNC_DIR}/config/tpp-username`" -tpp-password "`cat ${DoSNC_DIR}/config/tpp-password-file | base64 -d`" -z "`cat ${DoSNC_DIR}/config/tpp-zone-file`" -id "`cat ${BASE_DIR}/sec_B4_SNC_${Date}/snc-pickup-id`" -reason superseded |& tee -a ${LOG_FILE1} 
+                echo "" |& tee -a ${LOG_FILE1}
+                ENDTIME=`date +%s`
+                DIFFTIME=$((${ENDTIME} - ${STARTTIME}))                
+                echo "" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                echo -e "\e[34mInfo::\e[0m Congratulations, You have successfully completed SNC renewal on ${SID} in just ${DIFFTIME} seconds."    |& tee -a ${LOG_FILE1}             
+                #echo -e "\e[34m\e[5mUser-Action 01::\e[0m First, restart your SAP system -  ${SID} for the security & SNC/SPNEGO parameters to take effect."
+                #echo -e "\e[34m\e[5mUser-Action 01::\e[0m Second, import the SAPSNCS.pse file into SNC Cryptolib via STRUSTSSO2 to sync the SNC tables in the ABAP DB."
+                
+                # Send the SAPSNCS.pse file to the mail recepients now to import in STRUSTSSO2
+                echo -e "\e[34mInfo::\e[0m Sending a copy of the SAPSNCS.pse file for import in the SNC Cryptolib in STRUSTSSO2." |& tee -a ${LOG_FILE1}
+                echo -e "\e[34mInfo::\e[0m Sending the log file for this run of DoSNC for your reference." |& tee -a ${LOG_FILE1}
+                echo ""
+                echo ""
+                echo -e "\e[34m\e[5mUser-Action 01::\e[0m \e[93m Now, Import the SAPSNCS.pse file into SNC Cryptolib via STRUSTSSO2 to sync the SNC tables in the ABAP DB. \e[0m" |& tee -a ${LOG_FILE1}
+                echo -e "                 \e[93m Since, it was a SNC renewal action, there should not be any need of restarting the SAP system. \e[0m" |& tee -a ${LOG_FILE1}
+                echo ""  |& tee -a ${LOG_FILE1}
+                echo ""  |& tee -a ${LOG_FILE1}
+                echo -e "\e[32mPlease share your feedback about DoSNC tool with ${mailreceiver}.\e[0m" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                # Create the final logfile
+                cat ${DoSNC_DIR}/config/DoSNC-banner ${LOG_FILE1} > ${BASE_DIR}/snc_xact/DoSNC_final.log
+                cp -p  ${BASE_DIR}/snc_xact/DoSNC_final.log ${BASE_DIR}/sec/.
+                mailx -s "DoSNC ${ACTION} Completed Successfully on - ${SID}" -a ${BASE_DIR}/sec/SAPSNCS.pse ${mailreceiver} < ${BASE_DIR}/snc_xact/DoSNC_final.log
+                #echo -e "\e[34mInfo::\e[0m End Time stamp: `date`" 
+
+        else
+                echo -e "\e[34mInfo::\e[0m No Certificates to REVOKE as you had selected ENROLL action for DoSNC." |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                ENDTIME=`date +%s`
+                DIFFTIME=$((${ENDTIME} - ${STARTTIME}))                
+                echo "" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                echo -e "\e[34mInfo::\e[0m Congratulations, You have successfully completed SNC implementation on ${SID} in just ${DIFFTIME} seconds." |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+
+                # Send the SAPSNCS.pse file to the mail recepients now to import in STRUSTSSO2
+                echo -e "\e[34mInfo::\e[0m Sending a copy of the SAPSNCS.pse file for import in the SNC Cryptolib in STRUSTSSO2." |& tee -a ${LOG_FILE1}
+                echo -e "\e[34mInfo::\e[0m Sending the log file for this run of DoSNC for your reference." |& tee -a ${LOG_FILE1}
+                echo ""
+                echo ""
+                echo -e "\e[34m\e[5mUser-Action 01::\e[0m \e[93m First, restart your SAP system - ${SID} for the security & SNC/SPNEGO parameters to take effect.\e[0m" |& tee -a ${LOG_FILE1}
+                echo -e "\e[34m\e[5mUser-Action 02::\e[0m \e[93m Second, import the SAPSNCS.pse file into SNC Cryptolib via STRUSTSSO2 to sync the SNC tables in the ABAP DB.\e[0m" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                echo -e "\e[32mPlease share your feedback about DoSNC tool with ${mailreceiver}.\e[0m" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                echo "" |& tee -a ${LOG_FILE1}
+                # Create the final logfile
+                cat ${DoSNC_DIR}/config/DoSNC-banner ${LOG_FILE1} > ${BASE_DIR}/snc_xact/DoSNC_final.log
+                cp -p  ${BASE_DIR}/snc_xact/DoSNC_final.log ${BASE_DIR}/sec/.
+                mailx -s "DoSNC ${ACTION} Completed Successfully on - ${SID}" -a ${BASE_DIR}/sec/SAPSNCS.pse ${mailreceiver} < ${BASE_DIR}/snc_xact/DoSNC_final.log
+                #echo -e "\e[34mInfo::\e[0m End Time stamp: `date`"              
+        fi
+else
+    clear
+    echo -e "\e[31m\e[5mError Detected::\e[0m I am not supposed to be executed this way." 
+    echo ""
+    echo ""
+    echo ""
+    echo -e "\e[34mRefer to the tool help below -->\e[0m"
+    echo ""
+    echo ""
+        tool_help
+   fi
+exit 0
+}
+# END OF FUNCTION
+#==================================================
+
+
+#==================================================
+#Main Body of the Tool
+
+# Tool running options
+case ${1} in
+        -help)                   tool_help                                 ;;
+        -usage)			         tool_help				                   ;;
+        -version)                tool_version                              ;;
+        -h)                      tool_help                                 ;;
+        -v)                      tool_version                              ;;
+        -u)			             tool_help				                   ;;
+        -i)                      tool_info                                 ;;
+        -info)                   tool_info                                 ;;	
+        *)                       tool_input_check                          ;;
+esac
+#End of Main Body of the Tool
+#==================================================

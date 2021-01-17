@@ -1,0 +1,20 @@
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Begin4DoSNC ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# Note - Please do not add/change any parameter between the lines marked with "Begin/End 4DoSNC"  #
+# DoSNC Utility will delete and update the security & SNC/SPNEGO parameters whenever run          #
+#                     Security & SNC/SPNEGO Params staged by DoSNC                                #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#-------------------------------------SSO Security Parameters-------------------------------------#
+login/disable_password_logon = 1
+login/password_change_for_SSO = 1
+login/password_logon_usergroup = TESTQM
+snc/only_encrypted_gui = 1
+snc/accept_insecure_gui = 1
+#-------------------------------------SPNEGO/SNC Parameters---------------------------------------#
+snc/permit_insecure_start = 1
+snc/enable = 1
+snc/accept_insecure_rfc = 1
+snc/accept_insecure_cpic = 1
+snc/extid_login_diag = 1
+snc/extid_login_rfc = 1
+snc/gssapi_lib = $(SAPCRYPTOLIB)
+spnego/enable = 0
